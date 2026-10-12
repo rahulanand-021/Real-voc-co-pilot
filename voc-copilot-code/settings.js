@@ -4,7 +4,7 @@ module.exports = {
   app_id: 'com.nextbillion.groww',
   store_country: 'in',
   store_language: 'en',
-  fetch_window: 100,
+  fetch_window: 200,
   complaint_max_rating: 3,
   min_words: 4,
   excluded_warning_pct: 40,
