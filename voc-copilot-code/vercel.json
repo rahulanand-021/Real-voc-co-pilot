@@ -1,0 +1,5 @@
+{
+  "functions": {
+    "api/fetch.js": { "maxDuration": 60 }
+  }
+}

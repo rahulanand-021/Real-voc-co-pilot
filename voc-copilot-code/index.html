@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voice of Customer Co-pilot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root { --ink:#1F2933; --muted:#52606D; --border:#D5D9E0; --panel:#F4F5F7; --bar:#E4E7EB; --accent:#1D4ED8; --accent-dark:#1E3A8A; --grey:#9AA5B1; --error:#B42318; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:'IBM Plex Sans', sans-serif; color:var(--ink); background:#FFFFFF; }
+  h1,h2,h3,p { margin:0; }
+  a, .linklike { color:var(--accent); }
+  button { font-family:inherit; cursor:pointer; }
+  button:disabled { cursor:not-allowed; opacity:0.55; }
+  .linklike { background:none; border:0; padding:0; font-size:inherit; text-decoration:underline; }
+  .center { min-height:100vh; padding:48px 24px; display:flex; align-items:center; justify-content:center; background:var(--panel); }
+  .card { width:100%; max-width:460px; background:#fff; border:1px solid var(--border); border-radius:8px; padding:40px; display:flex; flex-direction:column; gap:20px; }
+  .field { display:flex; flex-direction:column; gap:8px; }
+  .field label { font-size:14px; font-weight:500; }
+  input[type=text], input[type=email], select { width:100%; height:44px; padding:0 12px; font-size:16px; font-family:inherit; border:1px solid var(--grey); border-radius:6px; background:#fff; color:var(--ink); }
+  .btn-primary { height:48px; font-size:16px; font-weight:600; color:#fff; background:var(--accent); border:0; border-radius:6px; }
+  .btn-primary:hover:not(:disabled) { background:var(--accent-dark); }
+  .btn-outline { height:40px; font-size:14px; font-weight:600; color:var(--accent); background:#fff; border:1px solid var(--accent); border-radius:6px; }
+  .btn-small { height:32px; padding:0 10px; font-size:13px; color:var(--accent); background:#fff; border:1px solid var(--border); border-radius:6px; }
+  .error { color:var(--error); font-size:14px; }
+  .muted { color:var(--muted); }
+  .wrap { max-width:1360px; margin:0 auto; padding:24px 32px; display:flex; flex-direction:column; gap:20px; }
+  .topbar { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:16px; padding-bottom:16px; border-bottom:1px solid var(--border); }
+  .layout { display:grid; grid-template-columns:minmax(300px,30%) 1fr; gap:24px; align-items:start; }
+  .panel { border:1px solid var(--border); border-radius:8px; padding:16px; display:flex; flex-direction:column; gap:14px; }
+  .main { display:flex; flex-direction:column; gap:20px; min-width:0; }
+  .headrow { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:flex-start; gap:24px; }
+  .fetcharea { display:flex; flex-direction:column; align-items:flex-end; gap:6px; max-width:380px; text-align:right; }
+  .fetchbtn { height:52px; padding:0 28px; font-size:16px; font-weight:600; color:#fff; background:var(--accent); border:0; border-radius:6px; }
+  .fetchbtn:hover:not(:disabled) { background:var(--accent-dark); }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:16px; }
+  .issue { border:1px solid var(--border); border-radius:8px; padding:16px; display:flex; flex-direction:column; gap:10px; }
+  .pill { display:inline-block; padding:2px 8px; font-size:12px; border:1px solid var(--grey); border-radius:10px; }
+  .quote { padding:10px; border-radius:6px; background:var(--panel); display:flex; flex-direction:column; gap:6px; font-size:14px; line-height:1.5; }
+  .label { font-size:12px; font-weight:600; letter-spacing:0.05em; text-transform:uppercase; color:var(--muted); }
+  .row2 { display:flex; flex-wrap:wrap; gap:16px; }
+  .barrow { display:flex; align-items:center; gap:10px; width:100%; padding:2px 0; font-size:13px; text-align:left; background:none; border:0; color:var(--ink); }
+  .barrow .name { width:170px; flex:none; }
+  .track { flex:1; height:16px; background:var(--panel); border-radius:3px; }
+  .fill { height:16px; border-radius:3px; background:var(--grey); }
+  .fill.top { background:var(--accent); }
+  .barrow .val { width:52px; flex:none; text-align:right; }
+  .review { border-top:1px solid var(--border); padding-top:12px; display:flex; flex-direction:column; gap:8px; }
+  .review .text { font-size:14px; line-height:1.5; overflow-wrap:anywhere; }
+  mark { background:#FEF3C7; color:inherit; }
+  mark.q { background:#DBEAFE; }
+  .tags { display:flex; flex-wrap:wrap; gap:6px; }
+  .list { display:flex; flex-direction:column; gap:12px; max-height:900px; overflow-y:auto; }
+  .banner { padding:10px 12px; border-radius:6px; background:#FFF7E6; border:1px solid #F5D08A; font-size:13px; }
+  .empty { padding:28px; border:1px dashed var(--grey); border-radius:8px; text-align:center; color:var(--muted); line-height:1.6; }
+  .checks { display:flex; flex-wrap:wrap; gap:12px; font-size:14px; }
+  @media (max-width: 900px) { .layout { grid-template-columns:1fr; } .wrap { padding:16px; } .fetcharea { align-items:flex-start; text-align:left; } .barrow .name { width:120px; } }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+(function () {
+  'use strict';
+  var LS_KEY = 'voc_email';
+  var App = { email: null, data: null, fetching: false, flash: '', error: '', errorKind: '', filters: { kw: '', ratings: [], cat: '' }, expanded: {}, waitUntil: 0, wasWaiting: false };
+  var root = document.getElementById('root');
+
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+  function escRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+  function fmtDate(iso) { if (!iso) return '[date]'; var d = new Date(iso); return isNaN(d) ? '[date]' : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); }
+  function fmtDateTime(iso) { if (!iso) return '[time]'; var d = new Date(iso); return isNaN(d) ? '[time]' : d.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); }
+  function pct(n) { return Number(n).toFixed(1) + '%'; }
+  function catLabel(id) { var c = (App.data.categories || []).filter(function (x) { return x.id === id; })[0]; return c ? c.label : (id || 'Not analyzed'); }
+  function reasonText(r) { return ({ non_english: 'not in English', duplicate: 'duplicate', empty: 'empty', too_short: 'too short' })[r] || 'not analyzed'; }
+  function store(key, val) { try { if (val === null) localStorage.removeItem(key); else localStorage.setItem(key, val); } catch (e) {} }
+  function load(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+
+  /* ---------- Screen 1: email ---------- */
+  function showEmail(message) {
+    root.innerHTML =
+      '<div class="center"><div class="card">' +
+      '<h1 style="font-size:28px;line-height:1.2;font-weight:600">Voice of Customer Co-pilot</h1>' +
+      '<p class="muted" style="font-size:16px;line-height:1.5">Turns Play Store reviews into product decisions.</p>' +
+      '<form id="email-form" class="field" novalidate>' +
+      '<label for="email">Email address</label>' +
+      '<input id="email" type="email" placeholder="name@example.com" autocomplete="email">' +
+      '<p id="email-error" class="error" role="alert">' + esc(message || '') + '</p>' +
+      '<button type="submit" class="btn-primary">Continue</button></form>' +
+      '<p class="muted" style="font-size:13px;line-height:1.5">We use your email only to limit usage. We do not share it or send marketing emails.</p>' +
+      '</div></div>';
+    document.getElementById('email-form').addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var value = document.getElementById('email').value;
+      var err = document.getElementById('email-error');
+      var btn = ev.target.querySelector('button');
+      err.textContent = ''; btn.disabled = true;
+      fetch('/api/signin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: value }) })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          btn.disabled = false;
+          if (!j.ok) { err.textContent = j.error || 'Please enter a valid email address.'; return; }
+          store(LS_KEY, j.email); App.email = j.email; loadDashboard();
+        })
+        .catch(function () { btn.disabled = false; err.textContent = 'The service is not available right now. Please try again later.'; });
+    });
+  }
+
+  function signOut() { store(LS_KEY, null); App.email = null; App.data = null; App.flash = ''; App.error = ''; showEmail(); }
+
+  /* ---------- Loading the dashboard data ---------- */
+  function loadDashboard() {
+    if (!App.data) root.innerHTML = '<div class="center"><p class="muted">Loading...</p></div>';
+    return fetch('/api/dashboard?email=' + encodeURIComponent(App.email))
+      .then(function (r) { return r.json().then(function (j) { return { status: r.status, j: j }; }); })
+      .then(function (res) {
+        if (res.status === 401) { signOut(); return; }
+        if (!res.j.ok) { throw new Error(res.j.error || 'error'); }
+        App.data = res.j;
+        if (!App.errorKind) App.error = '';
+        App.waitUntil = Date.now() + (res.j.user.wait_seconds || 0) * 1000;
+        renderDashboard();
+      })
+      .catch(function () {
+        if (App.data) { App.error = 'The service is not available right now. Showing the last data loaded.'; renderDashboard(); return; }
+        root.innerHTML = '<div class="center"><div class="card"><p class="error">The service is not available right now. Please try again later.</p><button class="btn-primary" id="retry">Try again</button></div></div>';
+        document.getElementById('retry').addEventListener('click', loadDashboard);
+      });
+  }
+
+  /* ---------- Screen 2: dashboard ---------- */
+  function headerHtml() {
+    var d = App.data, r = d.run, line, warn = '';
+    if (!d.has_data || !r) line = 'No data yet';
+    else {
+      var analyzed = d.reviews.filter(function (x) { return x.is_analyzable; }).length;
+      var notAnalyzed = d.reviews.length - analyzed;
+      line = 'Fetched ' + r.reviews_fetched + ' newest reviews (' + fmtDate(r.window_oldest) + ' to ' + fmtDate(r.window_newest) + ') &middot; ' + r.reviews_matching + ' critical &middot; ' + analyzed + ' analyzed &middot; ' + notAnalyzed + ' not analyzed &middot; Last updated ' + esc(fmtDateTime(d.last_fetched_at));
+      if (d.reviews.length && notAnalyzed / d.reviews.length * 100 > d.settings.excluded_warning_pct) warn = '<div class="banner">Many reviews were not analyzed; results may be less reliable.</div>';
+    }
+    return '<div class="topbar"><div><h1 style="font-size:20px;font-weight:600">Voice of Customer Co-pilot</h1><p class="muted" style="font-size:14px;margin-top:4px">Groww &middot; Google Play</p></div>' +
+      '<p class="muted" style="font-size:13px;line-height:1.5;max-width:560px">' + line + '</p>' +
+      '<p class="muted" style="font-size:13px">Signed in as ' + esc(App.email) + ' &middot; <button class="linklike" data-action="signout">Sign out</button></p></div>' + warn;
+  }
+
+  function fetchAreaHtml() {
+    var u = App.data.user, waiting = App.waitUntil > Date.now(), limited = u.limit_reached;
+    var secs = Math.max(1, Math.ceil((App.waitUntil - Date.now()) / 1000));
+    var disabled = App.fetching || waiting || limited;
+    var counter = 'Fetches left: ' + u.fetches_left + ' of ' + u.limit + (u.reset_at ? ' &middot; Resets at ' + esc(fmtDateTime(u.reset_at)) : '');
+    var helper = '';
+    if (App.fetching) helper = 'Fetching and analyzing reviews...';
+    else if (limited) helper = "You've used all " + u.limit + ' fetches for today. You can fetch again after ' + esc(fmtDateTime(u.reset_at)) + '.';
+    else if (waiting) helper = 'You can retry fetching in ' + secs + ' seconds.';
+    var msg = '';
+    if (App.flash) msg += '<p style="font-size:13px;font-weight:500" role="status">' + esc(App.flash) + '</p>';
+    if (App.error) {
+      var suffix = App.errorKind === 'failure' && App.data.has_data ? ' Showing data from ' + fmtDateTime(App.data.last_fetched_at) + '.' : '';
+      msg += '<p class="error" style="font-size:13px" role="alert">' + esc(App.error + suffix) + '</p>';
+    }
+    return '<button type="button" class="fetchbtn" data-action="fetch"' + (disabled ? ' disabled' : '') + '>' + (App.fetching ? 'Fetching...' : 'Fetch Play Store reviews') + '</button>' +
+      '<p class="muted" style="font-size:13px">' + counter + '</p>' +
+      (helper ? '<p class="muted" style="font-size:13px;font-style:italic">' + helper + '</p>' : '') + msg;
+  }
+  function refreshFetchArea() { var el = document.getElementById('fetch-area'); if (el) el.innerHTML = fetchAreaHtml(); }
+
+  function explorerHtml() {
+    var d = App.data, f = App.filters;
+    var opts = '<option value="">All categories</option>' + d.categories.map(function (c) { return '<option value="' + esc(c.id) + '"' + (f.cat === c.id ? ' selected' : '') + '>' + esc(c.label) + '</option>'; }).join('');
+    var checks = [1, 2, 3, 4, 5].map(function (n) { return '<label><input type="checkbox" data-rating="' + n + '"' + (f.ratings.indexOf(n) >= 0 ? ' checked' : '') + '> ' + n + '</label>'; }).join('');
+    return '<div class="panel"><h2 style="font-size:16px;font-weight:600">Review explorer</h2>' +
+      '<div class="field"><label for="kw" style="font-size:13px">Keyword</label><input id="kw" type="text" placeholder="Search reviews" value="' + esc(f.kw) + '"></div>' +
+      '<div class="field"><span style="font-size:13px;font-weight:500">Rating</span><div class="checks">' + checks + '</div></div>' +
+      '<div class="field"><label for="cat" style="font-size:13px">Category</label><select id="cat">' + opts + '</select></div>' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px" class="muted"><span id="review-count"></span><button class="btn-small" data-action="clear">Clear filters</button></div>' +
+      '<div id="review-list" class="list"></div></div>';
+  }
+
+  function filteredReviews() {
+    var f = App.filters, kw = f.kw.trim().toLowerCase();
+    return App.data.reviews.filter(function (r) {
+      if (f.ratings.length && f.ratings.indexOf(r.rating) < 0) return false;
+      if (f.cat && r.category !== f.cat) return false;
+      if (kw && String(r.text || '').toLowerCase().indexOf(kw) < 0) return false;
+      return true;
+    });
+  }
+  function hlKw(escaped) {
+    var kw = App.filters.kw.trim();
+    if (!kw) return escaped;
+    return escaped.replace(new RegExp(escRe(esc(kw)), 'gi'), function (m) { return '<mark>' + m + '</mark>'; });
+  }
+  function hlText(text, quote) {
+    text = String(text || '');
+    if (quote) {
+      var i = text.toLowerCase().indexOf(String(quote).toLowerCase());
+      if (i >= 0) return hlKw(esc(text.slice(0, i))) + '<mark class="q">' + hlKw(esc(text.slice(i, i + quote.length))) + '</mark>' + hlKw(esc(text.slice(i + quote.length)));
+    }
+    return hlKw(esc(text));
+  }
+  function reviewHtml(r) {
+    var open = !!App.expanded[r.review_id], tags = [];
+    if (!r.is_analyzable) tags.push('Not analyzed: ' + reasonText(r.exclusion_reason));
+    else {
+      tags.push(catLabel(r.category));
+      if (r.severity) tags.push('Severity ' + r.severity);
+      if (r.churn_signal) tags.push('Churn');
+      if (r.category === 'unclassified') tags.push('Low confidence');
+    }
+    var body = open ? hlText(r.text, r.quote) : hlKw(esc(String(r.text || '').length > 180 ? String(r.text).slice(0, 180) + '...' : r.text));
+    var more = open ? '<p class="muted" style="font-size:12px;line-height:1.6">Review ID: ' + esc(r.review_id) + (r.is_analyzable ? '<br>AI confidence: ' + esc(r.confidence == null ? 'n/a' : r.confidence) + (r.sub_issue ? '<br>Issue: ' + esc(r.sub_issue) : '') : '') + '</p>' : '';
+    return '<div class="review" id="rv-' + esc(r.review_id) + '"><p class="muted" style="font-size:12px">' + esc(r.rating) + ' stars &middot; ' + esc(fmtDate(r.date)) + '</p>' +
+      '<p class="text">' + body + '</p>' + more +
+      '<div class="tags">' + tags.map(function (t) { return '<span class="pill">' + esc(t) + '</span>'; }).join('') + '</div>' +
+      '<div><button class="linklike" style="font-size:13px" data-action="toggle" data-id="' + esc(r.review_id) + '">' + (open ? 'Hide details' : 'Show details') + '</button></div></div>';
+  }
+  function renderList() {
+    var list = document.getElementById('review-list'), count = document.getElementById('review-count');
+    if (!list) return;
+    var items = filteredReviews();
+    count.textContent = 'Showing ' + items.length + ' of ' + App.data.reviews.length + ' reviews';
+    if (!App.data.reviews.length) list.innerHTML = '<div class="empty">No reviews yet.</div>';
+    else if (!items.length) list.innerHTML = '<div class="empty">No reviews match these filters.<br><button class="btn-small" data-action="clear">Clear filters</button></div>';
+    else list.innerHTML = items.map(reviewHtml).join('');
+  }
+
+  function cardsHtml() {
+    var d = App.data, top = d.insights.filter(function (i) { return i.rank && i.rank <= 3; }).sort(function (a, b) { return a.rank - b.rank; });
+    if (!d.has_data) {
+      var msg = d.user.limit_reached ? 'No data yet. You can fetch again after ' + esc(fmtDateTime(d.user.reset_at)) + '.' : 'No reviews yet. Click Fetch Play Store reviews to load data.';
+      return '<div class="empty">' + msg + '</div>';
+    }
+    var note = '';
+    if (!top.length) note = 'Not enough reviews to identify a top issue.';
+    else if (top.length < 3) note = 'Only ' + top.length + ' issues had enough reviews to rank.';
+    if (d.run && d.run.reviews_matching < 10) note += (note ? ' ' : '') + 'Only ' + d.run.reviews_matching + ' critical reviews were found in the latest ' + d.settings.fetch_window + '.';
+    var cards = top.map(function (i) {
+      var rec = d.recommendations.filter(function (r) { return r.rank === i.rank; })[0] || {};
+      var qr = null;
+      (i.top_quote_ids || []).some(function (id) { var r = d.reviews.filter(function (x) { return x.review_id === id && x.quote; })[0]; if (r) { qr = r; return true; } return false; });
+      var max = d.settings.quote_max_chars_on_card, quoteHtml = '';
+      if (qr) {
+        var long = qr.quote.length > max, qt = long ? qr.quote.slice(0, max) + '...' : qr.quote;
+        quoteHtml = '<div class="quote"><span>' + esc(qt) + '</span><span class="muted" style="font-size:12px">' + esc(fmtDate(qr.date)) + ' &middot; ID ' + esc(qr.review_id) + (long ? ' &middot; <button class="linklike" data-action="showfull" data-id="' + esc(qr.review_id) + '">show full review</button>' : '') + '</span></div>';
+      } else quoteHtml = '<div class="quote muted">No verified quote available</div>';
+      var unavailable = '<span class="muted">Recommendation text unavailable.</span>';
+      return '<div class="issue"><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:14px;font-weight:600">#' + i.rank + '</span><span class="pill">Severity ' + esc(Number(i.severity_avg).toFixed(1)) + '</span></div>' +
+        '<h3 style="font-size:18px;font-weight:600">' + esc(catLabel(i.category)) + '</h3>' +
+        '<p style="font-size:14px;font-weight:500">' + i.review_count + ' of ' + d.reviews.filter(function (x) { return x.is_analyzable; }).length + ' reviews (' + pct(i.pct_of_analyzable) + ')</p>' +
+        '<p class="muted" style="font-size:13px">' + Math.round(i.churn_share * i.review_count) + ' churn signals</p>' +
+        '<p style="font-size:14px;line-height:1.5">' + (rec.rationale ? esc(rec.rationale) : unavailable) + '</p>' + quoteHtml +
+        '<p class="label">Suggested action</p><p style="font-size:14px;line-height:1.5">' + (rec.suggested_action ? esc(rec.suggested_action) : '&ndash;') + '</p>' +
+        '<p class="label">Metric to watch</p><p style="font-size:14px;line-height:1.5">' + (rec.metric_to_watch ? esc(rec.metric_to_watch) : '&ndash;') + '</p>' +
+        '<button class="btn-outline" data-action="view-cat" data-cat="' + esc(i.category) + '">View reviews</button></div>';
+    }).join('');
+    return (note ? '<div class="banner">' + esc(note) + '</div>' : '') + (cards ? '<div class="cards">' + cards + '</div>' : '');
+  }
+
+  function chartHtml() {
+    var d = App.data;
+    if (!d.insights.length) return '<div class="panel" style="flex:2 1 420px"><h3 style="font-size:16px;font-weight:600">Issues by share of critical reviews</h3><div class="empty">No analyzed reviews yet.</div></div>';
+    var rows = d.insights.slice().sort(function (a, b) { return b.pct_of_analyzable - a.pct_of_analyzable; }).map(function (i) {
+      var low = !i.rank && i.category !== 'other' && i.category !== 'unclassified' && i.review_count < d.settings.min_cluster_size;
+      return '<button type="button" class="barrow" data-action="bar" data-cat="' + esc(i.category) + '"><span class="name">' + esc(catLabel(i.category)) + ' (' + i.review_count + ')' + (low ? ' <span class="pill">Low volume</span>' : '') + '</span>' +
+        '<span class="track"><span class="fill' + (i.rank && i.rank <= 3 ? ' top' : '') + '" style="display:block;width:' + Math.min(100, Number(i.pct_of_analyzable)) + '%"></span></span><span class="val">' + pct(i.pct_of_analyzable) + '</span></button>';
+    }).join('');
+    return '<div class="panel" style="flex:2 1 420px"><h3 style="font-size:16px;font-weight:600">Issues by share of critical reviews</h3>' + rows + '<p class="muted" style="font-size:12px;font-style:italic">Click a bar to filter the review list.</p></div>';
+  }
+
+  function churnHtml() {
+    var d = App.data, list = d.reviews.filter(function (r) { return r.is_analyzable && r.churn_signal; });
+    var types = [['uninstall', 'Uninstall'], ['competitor', 'Competitor'], ['refund_or_closure', 'Refund or closure'], ['last_chance', 'Last chance'], ['other', 'Other']];
+    var rows = types.map(function (t) { return '<div style="display:flex;justify-content:space-between;font-size:13px"><span>' + t[1] + '</span><span>' + list.filter(function (r) { return r.churn_type === t[0]; }).length + '</span></div>'; }).join('');
+    var ex = list.filter(function (r) { return r.quote; }).slice(0, 3).map(function (r) { return '<div class="quote"><span>' + esc(r.quote) + '</span><span class="muted" style="font-size:12px">ID ' + esc(r.review_id) + '</span></div>'; }).join('');
+    return '<div class="panel" style="flex:1 1 260px"><h3 style="font-size:16px;font-weight:600">Churn signals</h3>' +
+      (list.length ? '<p style="font-size:14px;font-weight:500">' + list.length + ' reviews mention leaving</p>' + rows + '<p class="label">Example quotes</p>' + ex : '<p class="muted" style="font-size:14px">No churn signals found in these reviews.</p>') + '</div>';
+  }
+
+  function renderDashboard() {
+    var d = App.data;
+    root.innerHTML = '<div class="wrap">' + headerHtml() +
+      '<div class="layout">' + explorerHtml() +
+      '<div class="main">' +
+      '<div class="headrow"><div style="max-width:460px"><h2 style="font-size:22px;font-weight:600">Top 3 issues users are voicing</h2>' +
+      '<p class="muted" style="font-size:14px;line-height:1.5;margin-top:6px">Ranked by score. Percentages are shares of the selected critical reviews.</p></div>' +
+      '<div class="fetcharea" id="fetch-area"></div></div>' +
+      cardsHtml() +
+      '<div class="row2">' + chartHtml() + churnHtml() + '</div>' +
+      '<p class="muted" style="font-size:13px;line-height:1.5">How is this ranked? Score = share of reviews &times; average severity &times; (1 + churn share). Trend is not used in this demo.</p>' +
+      '</div></div></div>';
+    refreshFetchArea();
+    renderList();
+  }
+
+  /* ---------- Actions ---------- */
+  function doFetch() {
+    if (App.fetching) return;
+    App.fetching = true; App.error = ''; App.flash = ''; App.errorKind = '';
+    refreshFetchArea();
+    fetch('/api/fetch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: App.email }) })
+      .then(function (r) { return r.json(); })
+      .catch(function () { return { ok: false, error: 'Fetch failed. Please check your internet connection and try again.' }; })
+      .then(function (j) {
+        App.fetching = false;
+        if (j.ok) App.flash = j.message || 'Done.';
+        else if (j.reason === 'not_signed_in') { signOut(); return; }
+        else { App.error = j.error || 'Fetch failed.'; App.errorKind = j.reason ? 'limit' : 'failure'; }
+        return loadDashboard();
+      });
+  }
+  function gotoExplorer() { var el = document.getElementById('review-list'); if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+
+  document.addEventListener('click', function (ev) {
+    var t = ev.target.closest('[data-action]');
+    if (!t || !App.data && t.getAttribute('data-action') !== 'signout') return;
+    var a = t.getAttribute('data-action');
+    if (a === 'signout') signOut();
+    else if (a === 'fetch') doFetch();
+    else if (a === 'clear') { App.filters = { kw: '', ratings: [], cat: '' }; renderDashboard(); }
+    else if (a === 'toggle') { var id = t.getAttribute('data-id'); App.expanded[id] = !App.expanded[id]; renderList(); }
+    else if (a === 'view-cat' || a === 'bar') { App.filters.cat = t.getAttribute('data-cat'); renderDashboard(); gotoExplorer(); }
+    else if (a === 'showfull') {
+      var rid = t.getAttribute('data-id'); App.filters = { kw: '', ratings: [], cat: '' }; App.expanded[rid] = true; renderDashboard();
+      var el = document.getElementById('rv-' + rid); if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  });
+  document.addEventListener('input', function (ev) { if (ev.target.id === 'kw') { App.filters.kw = ev.target.value; renderList(); } });
+  document.addEventListener('change', function (ev) {
+    var t = ev.target;
+    if (t.id === 'cat') { App.filters.cat = t.value; renderList(); }
+    else if (t.hasAttribute && t.hasAttribute('data-rating')) {
+      var n = Number(t.getAttribute('data-rating')), i = App.filters.ratings.indexOf(n);
+      if (t.checked && i < 0) App.filters.ratings.push(n); else if (!t.checked && i >= 0) App.filters.ratings.splice(i, 1);
+      renderList();
+    }
+  });
+
+  // Once a second: count down the 10-second wait, and re-check when the 24-hour window ends.
+  setInterval(function () {
+    if (!App.data || !document.getElementById('fetch-area')) return;
+    var waiting = App.waitUntil > Date.now();
+    if (waiting || App.wasWaiting) refreshFetchArea();
+    App.wasWaiting = waiting;
+    var u = App.data.user;
+    if (u.limit_reached && u.reset_at && Date.now() >= new Date(u.reset_at).getTime() && !App.fetching) { App.data.user.reset_at = null; loadDashboard(); }
+  }, 1000);
+
+  App.email = load(LS_KEY);
+  if (App.email) loadDashboard(); else showEmail();
+})();
+</script>
+</body>
+</html>
