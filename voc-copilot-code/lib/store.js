@@ -84,13 +84,14 @@ async function getLiveRun(db, runId) {
   return check(await db.from('fetch_log').select('reviews_fetched,reviews_matching,reviews_selected,window_oldest,window_newest,finished_at').eq('id', runId).maybeSingle(), 'reading the last fetch');
 }
 
-async function getLiveReviews(db) {
+async function getReviewsByIds(db, ids) {
+  if (!ids.length) return [];
   return check(await db.from('reviews').select('review_id,rating,review_text,review_date,thumbs_up,is_analyzable,exclusion_reason')
-    .eq('in_live_set', true).order('review_date', { ascending: false }), 'reading reviews') || [];
+    .in('review_id', ids).order('review_date', { ascending: false }), 'reading reviews') || [];
 }
 
-async function getLiveIds(db) {
-  const rows = check(await db.from('reviews').select('review_id').eq('in_live_set', true), 'reading the live reviews') || [];
+async function getRunReviewIds(db, runId) {
+  const rows = check(await db.from('run_reviews').select('review_id').eq('run_id', runId), 'reading the reviews of a fetch') || [];
   return rows.map((r) => r.review_id);
 }
 
@@ -114,5 +115,5 @@ async function getRecommendations(db, runId) {
 
 module.exports = {
   upsertUser, getUser, getAppState, beginFetch, endFetch, getExistingReviews, upsertReviews, markNonEnglish,
-  getTags, saveTags, saveInsights, saveRecommendations, getLiveRun, getLiveReviews, getLiveIds, benchmarkIsEmpty, saveBenchmark, getInsights, getRecommendations
+  getTags, saveTags, saveInsights, saveRecommendations, getLiveRun, getReviewsByIds, getRunReviewIds, benchmarkIsEmpty, saveBenchmark, getInsights, getRecommendations
 };

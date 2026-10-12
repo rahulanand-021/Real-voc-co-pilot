@@ -38,7 +38,7 @@ async function makeRecommendations({ apiKey, input, stats, deadline }) {
     { rank: i.rank, category: i.category, rationale: null, suggested_action: null, metric_to_watch: null, evidence_review_ids: [] });
 }
 
-async function runFetch({ db, runId, stats, deadline, markStarted }) {
+async function runFetch({ db, runId, liveRunId, stats, deadline, markStarted }) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     console.error('Missing environment variable: GEMINI_API_KEY');
@@ -60,8 +60,8 @@ async function runFetch({ db, runId, stats, deadline, markStarted }) {
   const ids = rows.map((r) => r.review_id);
   const existing = await store.getExistingReviews(db, ids);
   const existingMap = new Map(existing.map((e) => [e.review_id, e]));
-  // "New" means not in the data currently shown on the dashboard (a failed earlier fetch may have saved reviews already).
-  const liveIds = new Set(await store.getLiveIds(db));
+  // "New" means not in this email's current dashboard data (a failed earlier fetch may have saved reviews already).
+  const liveIds = new Set(liveRunId ? await store.getRunReviewIds(db, liveRunId) : []);
   const newCount = ids.filter((id) => !liveIds.has(id)).length;
   rows = rows.map((r) => {
     const ex = existingMap.get(r.review_id);
@@ -160,8 +160,9 @@ module.exports = async function handler(req, res) {
 
   // Server-side limits: 3 fetches per 24 hours, 10 seconds apart, one fetch at a time (Module H).
   let begin;
+  let user;
   try {
-    const user = await store.getUser(db, email);
+    user = await store.getUser(db, email);
     if (!user) return send(res, 401, { ok: false, reason: 'not_signed_in', error: 'Please sign in with your email.' });
     begin = await store.beginFetch(db, email, S);
   } catch (e) {
@@ -179,7 +180,7 @@ module.exports = async function handler(req, res) {
   const stats = { invented_numbers_caught: 0, cost_estimate: null };
   let analysisStarted = false;
   try {
-    const out = await runFetch({ db, runId, stats, deadline, markStarted: () => { analysisStarted = true; } });
+    const out = await runFetch({ db, runId, liveRunId: user.live_run_id || null, stats, deadline, markStarted: () => { analysisStarted = true; } });
     stats.duration_seconds = (Date.now() - startedAt) / 1000;
     await store.endFetch(db, { runId, email, status: 'success', counted: true, liveIds: out.liveIds, stats });
     // A7: the first successful fetch saves its analyzed reviews as the benchmark set (never changed by later fetches).

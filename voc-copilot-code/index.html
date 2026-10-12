@@ -211,7 +211,7 @@
     }
     var body = open ? hlText(r.text, r.quote) : hlKw(esc(String(r.text || '').length > 180 ? String(r.text).slice(0, 180) + '...' : r.text));
     var more = open ? '<p class="muted" style="font-size:12px;line-height:1.6">Review ID: ' + esc(r.review_id) + (r.is_analyzable ? '<br>AI confidence: ' + esc(r.confidence == null ? 'n/a' : r.confidence) + (r.sub_issue ? '<br>Issue: ' + esc(r.sub_issue) : '') : '') + '</p>' : '';
-    return '<div class="review" id="rv-' + esc(r.review_id) + '"><p class="muted" style="font-size:12px">' + esc(r.rating) + ' stars &middot; ' + esc(fmtDate(r.date)) + '</p>' +
+    return '<div class="review" id="rv-' + esc(r.review_id) + '"><p class="muted" style="font-size:12px">' + esc(r.rating) + (r.rating === 1 ? ' star' : ' stars') + ' &middot; ' + esc(fmtDate(r.date)) + '</p>' +
       '<p class="text">' + body + '</p>' + more +
       '<div class="tags">' + tags.map(function (t) { return '<span class="pill">' + esc(t) + '</span>'; }).join('') + '</div>' +
       '<div><button class="linklike" style="font-size:13px" data-action="toggle" data-id="' + esc(r.review_id) + '">' + (open ? 'Hide details' : 'Show details') + '</button></div></div>';
@@ -249,7 +249,7 @@
       return '<div class="issue"><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:14px;font-weight:600">#' + i.rank + '</span><span class="pill">Severity ' + esc(Number(i.severity_avg).toFixed(1)) + '</span></div>' +
         '<h3 style="font-size:18px;font-weight:600">' + esc(catLabel(i.category)) + '</h3>' +
         '<p style="font-size:14px;font-weight:500">' + i.review_count + ' of ' + d.reviews.filter(function (x) { return x.is_analyzable; }).length + ' reviews (' + pct(i.pct_of_analyzable) + ')</p>' +
-        '<p class="muted" style="font-size:13px">' + Math.round(i.churn_share * i.review_count) + ' churn signals</p>' +
+        '<p class="muted" style="font-size:13px">' + Math.round(i.churn_share * i.review_count) + (Math.round(i.churn_share * i.review_count) === 1 ? ' churn signal' : ' churn signals') + '</p>' +
         '<p style="font-size:14px;line-height:1.5">' + (rec.rationale ? esc(rec.rationale) : unavailable) + '</p>' + quoteHtml +
         '<p class="label">Suggested action</p><p style="font-size:14px;line-height:1.5">' + (rec.suggested_action ? esc(rec.suggested_action) : '&ndash;') + '</p>' +
         '<p class="label">Metric to watch</p><p style="font-size:14px;line-height:1.5">' + (rec.metric_to_watch ? esc(rec.metric_to_watch) : '&ndash;') + '</p>' +
@@ -275,7 +275,7 @@
     var rows = types.map(function (t) { return '<div style="display:flex;justify-content:space-between;font-size:13px"><span>' + t[1] + '</span><span>' + list.filter(function (r) { return r.churn_type === t[0]; }).length + '</span></div>'; }).join('');
     var ex = list.filter(function (r) { return r.quote; }).slice(0, 3).map(function (r) { return '<div class="quote"><span>' + esc(r.quote) + '</span><span class="muted" style="font-size:12px">ID ' + esc(r.review_id) + '</span></div>'; }).join('');
     return '<div class="panel" style="flex:1 1 260px"><h3 style="font-size:16px;font-weight:600">Churn signals</h3>' +
-      (list.length ? '<p style="font-size:14px;font-weight:500">' + list.length + ' reviews mention leaving</p>' + rows + '<p class="label">Example quotes</p>' + ex : '<p class="muted" style="font-size:14px">No churn signals found in these reviews.</p>') + '</div>';
+      (list.length ? '<p style="font-size:14px;font-weight:500">' + list.length + (list.length === 1 ? ' review mentions leaving' : ' reviews mention leaving') + '</p>' + rows + '<p class="label">Example quotes</p>' + ex : '<p class="muted" style="font-size:14px">No churn signals found in these reviews.</p>') + '</div>';
   }
 
   function renderDashboard() {

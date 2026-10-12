@@ -1,4 +1,4 @@
--- PRD section 5A: run this once in Supabase's SQL editor (skip if you already did).
+-- PRD section 5A: run this once in Supabase's SQL editor (new database only).
 create table users (
   email text primary key,
   first_seen_at timestamptz not null default now(),
@@ -29,12 +29,15 @@ create table fetch_log (
   error_message text
 );
 
+-- Each email keeps its own live fetch (nothing is shared between emails).
+alter table users add column live_run_id bigint references fetch_log(id);
+
 create table app_state (
   key text primary key,
   value text,
   updated_at timestamptz not null default now()
 );
-insert into app_state (key, value) values ('live_run_id', null), ('last_fetched_at', null), ('fetch_lock_until', null);
+insert into app_state (key, value) values ('fetch_lock_until', null);
 
 create table reviews (
   review_id text primary key,
@@ -45,7 +48,6 @@ create table reviews (
   language text,
   is_analyzable boolean not null default true,
   exclusion_reason text check (exclusion_reason in ('empty','too_short','non_english','duplicate')),
-  in_live_set boolean not null default false,
   fetched_at timestamptz not null default now()
 );
 
@@ -90,6 +92,12 @@ create table recommendations (
   primary key (run_id, rank)
 );
 
+create table run_reviews (
+  run_id bigint not null references fetch_log(id),
+  review_id text not null references reviews(review_id),
+  primary key (run_id, review_id)
+);
+
 create table benchmark_set (
   review_id text primary key references reviews(review_id)
 );
@@ -111,3 +119,4 @@ alter table insights enable row level security;
 alter table recommendations enable row level security;
 alter table benchmark_set enable row level security;
 alter table gold_labels enable row level security;
+alter table run_reviews enable row level security;

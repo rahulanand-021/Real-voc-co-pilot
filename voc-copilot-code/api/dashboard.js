@@ -18,8 +18,8 @@ module.exports = async function handler(req, res) {
     const user = await store.getUser(db, email);
     if (!user) return send(res, 401, { ok: false, reason: 'not_signed_in', error: 'Please sign in with your email.' });
     const quota = computeQuota(user, S);
-    const state = await store.getAppState(db);
-    const liveRunId = state.live_run_id ? Number(state.live_run_id) : null;
+    // Each email sees only its own last fetch (a new email starts blank).
+    const liveRunId = user.live_run_id ? Number(user.live_run_id) : null;
 
     let run = null;
     let reviews = [];
@@ -27,7 +27,8 @@ module.exports = async function handler(req, res) {
     let recommendations = [];
     if (liveRunId) {
       run = await store.getLiveRun(db, liveRunId);
-      const revRows = await store.getLiveReviews(db);
+      const ids = await store.getRunReviewIds(db, liveRunId);
+      const revRows = await store.getReviewsByIds(db, ids);
       const tags = await store.getTags(db, revRows.map((r) => r.review_id), S);
       const tagMap = new Map(tags.map((t) => [t.review_id, t]));
       reviews = revRows.map((r) => {
@@ -48,7 +49,7 @@ module.exports = async function handler(req, res) {
     return send(res, 200, {
       ok: true,
       has_data: !!liveRunId,
-      last_fetched_at: state.last_fetched_at || null,
+      last_fetched_at: (run && run.finished_at) || null,
       run,
       user: { email, ...quota },
       settings: {

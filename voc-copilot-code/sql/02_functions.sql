@@ -99,11 +99,13 @@ begin
     where email = p_email;
   end if;
 
-  -- The live data switches in one step, and only when everything succeeded.
-  if p_status = 'success' and p_live_ids is not null then
-    update reviews set in_live_set = (review_id = any(p_live_ids));
-    update app_state set value = p_run_id::text, updated_at = now() where key = 'live_run_id';
-    update app_state set value = now()::text, updated_at = now() where key = 'last_fetched_at';
+  -- Each email keeps its own data: link this fetch's reviews to the fetch, and make it
+  -- this email's live fetch. This happens in one step, and only when everything succeeded.
+  if p_status = 'success' and p_live_ids is not null and p_email is not null then
+    insert into run_reviews (run_id, review_id)
+      select p_run_id, unnest(p_live_ids)
+      on conflict do nothing;
+    update users set live_run_id = p_run_id where email = p_email;
   end if;
 
   update app_state set value = null, updated_at = now() where key = 'fetch_lock_until';
