@@ -10,7 +10,7 @@ module.exports = {
   excluded_warning_pct: 40,
   ai_model: 'gemini-1.5-flash',
   ai_temperature: 0,
-  tag_batch_size: 30,
+  tag_batch_size: 10,
   min_confidence: 0.6,
   taxonomy_version: 'v1',
   prompt_version: 'v1',
