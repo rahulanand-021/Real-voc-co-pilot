@@ -20,8 +20,11 @@ async function makeRecommendations({ apiKey, input, stats, deadline }) {
     let items;
     try {
       items = await askJson({
-        apiKey, model: S.ai_model, temperature: S.ai_temperature,
-        systemText: P.RECOMMENDATION_INSTRUCTIONS, userText: 'Issues:\n' + JSON.stringify(input),
+        apiKey,
+        model: S.ai_model,
+        temperature: S.ai_temperature,
+        systemText: P.RECOMMENDATION_INSTRUCTIONS,
+        userText: JSON.stringify(input), // Minified payload to save input tokens
         schema: P.RECOMMENDATION_SCHEMA
       }, isArray);
     } catch (e) {
@@ -33,7 +36,6 @@ async function makeRecommendations({ apiKey, input, stats, deadline }) {
     v.rows.forEach((r) => have.set(r.rank, r));
     if (v.ok) break;
   }
-  // Anything that never passed the checks becomes "Recommendation text unavailable" on screen.
   return input.issues.map((i) => have.get(i.rank) ||
     { rank: i.rank, category: i.category, rationale: null, suggested_action: null, metric_to_watch: null, evidence_review_ids: [] });
 }
@@ -45,7 +47,7 @@ async function runFetch({ db, runId, liveRunId, stats, deadline, markStarted }) 
     throw withKind(new Error('Analysis service not configured'), 'config');
   }
 
-  // 1. Read the newest reviews and keep the critical ones (D20, D21).
+  // 1. Ingest reviews and keep critical ones (D20, D21)
   let raw;
   try { raw = await fetchNewestReviews(S); } catch (e) { throw withKind(new Error('Play Store fetch failed'), 'playstore'); }
   const sel = PL.selectCritical(raw, S);
@@ -55,12 +57,11 @@ async function runFetch({ db, runId, liveRunId, stats, deadline, markStarted }) 
   stats.window_oldest = sel.windowOldest;
   stats.window_newest = sel.windowNewest;
 
-  // 2. Save them (the live switch happens only at the very end).
+  // 2. Mark duplicates and upsert
   let rows = PL.markDuplicates(sel.matching);
   const ids = rows.map((r) => r.review_id);
   const existing = await store.getExistingReviews(db, ids);
   const existingMap = new Map(existing.map((e) => [e.review_id, e]));
-  // "New" means not in this email's current dashboard data (a failed earlier fetch may have saved reviews already).
   const liveIds = new Set(liveRunId ? await store.getRunReviewIds(db, liveRunId) : []);
   const newCount = ids.filter((id) => !liveIds.has(id)).length;
   rows = rows.map((r) => {
@@ -69,11 +70,13 @@ async function runFetch({ db, runId, liveRunId, stats, deadline, markStarted }) 
   });
   await store.upsertReviews(db, rows);
 
-  // 3. Label only reviews that have no saved label yet.
+  // 3. Label only unclassified / uncached reviews
   const analyzable = rows.filter((r) => r.is_analyzable);
   const cachedTags = await store.getTags(db, analyzable.map((r) => r.review_id), S);
   const cachedIds = new Set(cachedTags.map((t) => t.review_id));
-  const toTag = analyzable.filter((r) => !cachedIds.has(r.review_id));
+  
+  // Rate-limit guard: process at most 15 new reviews per fetch to prevent single-call quota blowouts
+  const toTag = analyzable.filter((r) => !cachedIds.has(r.review_id)).slice(0, 15);
   stats.new_reviews_analyzed = toTag.length;
 
   const system = P.buildTaggingSystem();
@@ -81,18 +84,30 @@ async function runFetch({ db, runId, liveRunId, stats, deadline, markStarted }) 
   const nonEnglish = [];
   let quoteTotal = 0;
   let quoteOk = 0;
-  for (const batch of PL.chunk(toTag, S.tag_batch_size)) {
+
+  const batches = PL.chunk(toTag, S.tag_batch_size);
+  for (let bIdx = 0; bIdx < batches.length; bIdx++) {
+    const batch = batches[bIdx];
     if (Date.now() > deadline) throw withKind(new Error('Fetch took too long'), 'timeout');
+    
+    // Pace requests slightly between batches to protect free-tier rate limits
+    if (bIdx > 0) await U.sleep(1200);
+
     let aiItems = null;
     try {
       aiItems = await askJson({
-        apiKey, model: S.ai_model, temperature: S.ai_temperature, systemText: system,
-        userText: 'Reviews to label:\n' + PL.buildTaggingInput(batch), schema: P.TAGGING_SCHEMA
+        apiKey,
+        model: S.ai_model,
+        temperature: S.ai_temperature,
+        systemText: system,
+        userText: PL.buildTaggingInput(batch),
+        schema: P.TAGGING_SCHEMA
       }, isArray);
     } catch (e) {
-      if (e instanceof AiError && e.kind === 'bad_answer') aiItems = null; // those reviews become "unclassified"
+      if (e instanceof AiError && e.kind === 'bad_answer') aiItems = null;
       else throw withKind(e, e instanceof AiError && e.kind === 'config' ? 'config' : 'ai_busy');
     }
+
     markStarted();
     const r = PL.interpretTagging(batch, aiItems, S);
     for (const t of r.tags) {
@@ -101,12 +116,13 @@ async function runFetch({ db, runId, liveRunId, stats, deadline, markStarted }) 
     }
     nonEnglish.push(...r.nonEnglish);
   }
-  markStarted(); // analysis counts as started even when every label was already saved
+
+  markStarted();
   await store.saveTags(db, newTags);
   await store.markNonEnglish(db, nonEnglish);
   stats.quote_pass_rate = quoteTotal ? U.round2((quoteOk / quoteTotal) * 100) : null;
 
-  // 4. Count, score and rank (Module E).
+  // 4. Aggregate & Rank (Module E)
   const nonEnglishSet = new Set(nonEnglish);
   const tagMap = new Map(cachedTags.concat(newTags).map((t) => [t.review_id, t]));
   const aggRows = [];
@@ -115,20 +131,27 @@ async function runFetch({ db, runId, liveRunId, stats, deadline, markStarted }) 
     const t = tagMap.get(r.review_id);
     if (!t) continue;
     aggRows.push({
-      review_id: r.review_id, category: t.category, severity: t.severity, churn_signal: t.churn_signal === true,
-      quote_verified: t.quote_verified === true, confidence: Number(t.confidence) || 0, thumbs_up: r.thumbs_up
+      review_id: r.review_id,
+      category: t.category,
+      severity: t.severity,
+      churn_signal: t.churn_signal === true,
+      quote_verified: t.quote_verified === true,
+      confidence: Number(t.confidence) || 0,
+      thumbs_up: r.thumbs_up
     });
   }
+
   const insights = PL.aggregate(aggRows, S);
   const top = insights.filter((i) => i.rank !== null && i.rank <= 3).sort((a, b) => a.rank - b.rank);
 
-  // 5. Recommendations for the top 3 (Module F).
+  // 5. Generate roadmap recommendations (Module F)
   let recos = [];
   if (top.length) {
     const quoteMap = new Map(cachedTags.concat(newTags).filter((t) => t.quote && t.quote_verified).map((t) => [t.review_id, t.quote]));
     const input = PL.buildRecoInput(top, aggRows.length, quoteMap);
     recos = await makeRecommendations({ apiKey, input, stats, deadline });
   }
+
   await store.saveInsights(db, runId, insights);
   await store.saveRecommendations(db, runId, recos);
 
@@ -136,6 +159,7 @@ async function runFetch({ db, runId, liveRunId, stats, deadline, markStarted }) 
   if (rows.length === 0) message = 'Only 0 critical reviews were found in the latest ' + S.fetch_window + '.';
   else if (newCount === 0) message = 'No new reviews since last fetch.';
   else message = 'Loaded ' + rows.length + ' reviews.';
+
   return { liveIds: ids, message, benchmarkIds: aggRows.map((r) => r.review_id) };
 }
 
@@ -150,7 +174,7 @@ const MESSAGES = {
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return send(res, 405, { ok: false, error: 'Use POST.' });
   const startedAt = Date.now();
-  const deadline = startedAt + 50000; // stop safely before Vercel's 60 second limit
+  const deadline = startedAt + 50000;
   const body = await readBody(req);
   const email = U.normalizeEmail(body.email);
   if (!email) return send(res, 400, { ok: false, error: 'Please enter a valid email address.' });
@@ -158,7 +182,6 @@ module.exports = async function handler(req, res) {
   let db;
   try { db = getDb(); } catch (e) { return send(res, 500, { ok: false, error: 'The service is not configured yet.' }); }
 
-  // Server-side limits: 3 fetches per 24 hours, 10 seconds apart, one fetch at a time (Module H).
   let begin;
   let user;
   try {
@@ -168,6 +191,7 @@ module.exports = async function handler(req, res) {
   } catch (e) {
     return send(res, 500, { ok: false, error: MESSAGES.db });
   }
+
   if (!begin || !begin.ok) {
     const reason = begin && begin.reason;
     if (reason === 'limit') return send(res, 429, { ok: false, reason, reset_at: begin.reset_at, error: "You've used all " + S.fetch_limit_per_window + ' fetches for today.' });
@@ -179,11 +203,11 @@ module.exports = async function handler(req, res) {
   const runId = begin.run_id;
   const stats = { invented_numbers_caught: 0, cost_estimate: null };
   let analysisStarted = false;
+
   try {
     const out = await runFetch({ db, runId, liveRunId: user.live_run_id || null, stats, deadline, markStarted: () => { analysisStarted = true; } });
     stats.duration_seconds = (Date.now() - startedAt) / 1000;
     await store.endFetch(db, { runId, email, status: 'success', counted: true, liveIds: out.liveIds, stats });
-    // A7: the first successful fetch saves its analyzed reviews as the benchmark set (never changed by later fetches).
     try {
       if (await store.benchmarkIsEmpty(db)) await store.saveBenchmark(db, out.benchmarkIds);
     } catch (e) { console.error('Could not save the benchmark set:', e && e.message ? e.message : e); }
@@ -193,7 +217,6 @@ module.exports = async function handler(req, res) {
     console.error('Fetch failed (' + kind + '):', e && e.message ? e.message : e);
     stats.duration_seconds = (Date.now() - startedAt) / 1000;
     stats.error_message = String(e && e.message ? e.message : e).slice(0, 300);
-    // A fetch counts once analysis has started, except for configuration problems and time-outs.
     const counted = analysisStarted && kind !== 'config' && kind !== 'timeout';
     try {
       await store.endFetch(db, { runId, email, status: analysisStarted ? 'failed_after_analysis' : 'failed_before_analysis', counted, liveIds: null, stats });
