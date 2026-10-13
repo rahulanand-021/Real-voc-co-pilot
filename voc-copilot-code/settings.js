@@ -14,11 +14,11 @@ module.exports = {
   min_confidence: 0.6,
   taxonomy_version: 'v1',
   prompt_version: 'v1',
-  min_cluster_size: 3,
+  min_cluster_size: 2,
   trend_enabled: false,
   fetch_limit_per_window: 3,
   window_hours: 24,
   fetch_cooldown_seconds: 10,
   fetch_lock_minutes: 5,
-  quote_max_chars_on_card: 200
+  quote_max_chars_on_card: 150
 };
