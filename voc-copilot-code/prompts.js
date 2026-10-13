@@ -39,16 +39,7 @@ Rules:
 const EXAMPLES = [
   { input: { review_id: 'ex1', rating: 1, text: 'Account opening stuck at signature step for 3 days. Keeps saying verification pending. Very frustrating.' },
     output: { review_id: 'ex1', analyzable: true, category: 'onboarding_kyc', sub_issue: 'verification pending for days', sentiment: 'negative', severity: 2, churn_signal: false, confidence: 0.95, quote: 'stuck at signature step for 3 days' } },
-  { input: { review_id: 'ex2', rating: 1, text: 'Wow amazing, the app crashed AGAIN exactly when the market opened. Truly great timing.' },
-    output: { review_id: 'ex2', analyzable: true, category: 'app_performance', sub_issue: 'crashes at market open', sentiment: 'negative', severity: 2, churn_signal: false, confidence: 0.85, quote: 'the app crashed AGAIN exactly when the market opened' } },
-  { input: { review_id: 'ex3', rating: 1, text: 'Money was debited but not added to my account. Support keeps ignoring me. I am uninstalling and moving to another app tomorrow.' },
-    output: { review_id: 'ex3', analyzable: true, category: 'payments_deposits', sub_issue: 'money debited but not credited', sentiment: 'negative', severity: 3, churn_signal: true, churn_type: 'uninstall', confidence: 0.9, quote: 'Money was debited but not added to my account' } },
-  { input: { review_id: 'ex4', rating: 5, text: 'Simple and clean app, easy to use.' },
-    output: { review_id: 'ex4', analyzable: true, category: 'other', sub_issue: 'no problem mentioned', sentiment: 'positive', severity: 1, churn_signal: false, confidence: 0.9, quote: 'Simple and clean app, easy to use' } },
-  { input: { review_id: 'ex5', rating: 5, text: 'बहुत बढ़िया ऐप है' },
-    output: { review_id: 'ex5', analyzable: false, skip_reason: 'non_english' } },
-  { input: { review_id: 'ex6', rating: 3, text: 'Bahut accha app hai, par withdraw mein bahut time lagta hai' },
-    output: { review_id: 'ex6', analyzable: true, category: 'withdrawals', sub_issue: 'withdrawals take too long', sentiment: 'negative', severity: 2, churn_signal: false, confidence: 0.8, quote: 'withdraw mein bahut time lagta hai' } },
+
   { input: { review_id: 'ex7', rating: 1, text: 'THIS APP IS A SCAM. THEY CHARGE HIDDEN FEES AND NOBODY REPLIES TO MY COMPLAINTS 😡😡' },
     output: { review_id: 'ex7', analyzable: true, category: 'fees_charges', sub_issue: 'hidden fees and no reply', sentiment: 'negative', severity: 2, churn_signal: false, confidence: 0.7, quote: 'THEY CHARGE HIDDEN FEES AND NOBODY REPLIES TO MY COMPLAINTS' } }
 ];
