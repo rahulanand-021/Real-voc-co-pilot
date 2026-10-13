@@ -14,7 +14,7 @@ async function callGemini({ apiKey, model, temperature, systemText, userText, sc
   if (!apiKey) throw new AiError('API key is missing (set GEMINI_API_KEY or GROQ_API_KEY)', 'config');
 
   // If settings.js still has a Gemini model name, fall back to Groq's high-performance model
-  const effectiveModel = (model && !model.includes('gemini')) ? model : 'llama-3.3-70b-versatile';
+  const effectiveModel = 'llama-3.1-8b-instant';
 
   const url = 'https://api.groq.com/openai/v1/chat/completions';
 
