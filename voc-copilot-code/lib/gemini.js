@@ -1,5 +1,5 @@
 'use strict';
-// Calls Groq API with structured JSON output. Only review text goes in: never emails.
+// Calls Google's Gemini API with structured JSON output.
 const U = require('./util');
 
 class AiError extends Error {
@@ -11,27 +11,24 @@ class AiError extends Error {
 }
 
 async function callGemini({ apiKey, model, temperature, systemText, userText, schema, timeoutMs }) {
-  if (!apiKey) throw new AiError('API key is missing (set GEMINI_API_KEY or GROQ_API_KEY)', 'config');
+  if (!apiKey) throw new AiError('GEMINI_API_KEY is missing', 'config');
 
-  // If settings.js still has a Gemini model name, fall back to Groq's high-performance model
-  const effectiveModel = 'llama-3.1-8b-instant';
-
-  const url = 'https://api.groq.com/openai/v1/chat/completions';
-
-  // Instruct Groq to return JSON strictly matching the schema instructions
-  const enhancedSystemText = `${systemText || ''}\nYou must return valid JSON only. Do not wrap output in markdown code blocks or backticks.`;
-
-  const messages = [
-    { role: 'system', content: enhancedSystemText },
-    { role: 'user', content: userText }
-  ];
+  // Ensure an active Gemini model is targeted
+  const activeModel = (model && model.startsWith('gemini')) ? model : 'gemini-1.5-flash';
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent`;
 
   const body = {
-    model: effectiveModel,
-    messages: messages,
-    temperature: typeof temperature === 'number' ? temperature : 0,
-    response_format: { type: 'json_object' }
+    systemInstruction: { parts: [{ text: systemText }] },
+    contents: [{ role: 'user', parts: [{ text: userText }] }],
+    generationConfig: {
+      temperature: typeof temperature === 'number' ? temperature : 0,
+      responseMimeType: 'application/json'
+    }
   };
+
+  if (schema) {
+    body.generationConfig.responseSchema = schema;
+  }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs || 40000);
@@ -41,10 +38,7 @@ async function callGemini({ apiKey, model, temperature, systemText, userText, sc
   try {
     res = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey.trim()}`
-      },
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey.trim() },
       body: JSON.stringify(body),
       signal: controller.signal
     });
@@ -57,7 +51,7 @@ async function callGemini({ apiKey, model, temperature, systemText, userText, sc
 
   if (!res.ok) {
     const kind = res.status === 400 || res.status === 401 || res.status === 403 ? 'config' : 'busy';
-    console.error('Groq error', res.status, raw.slice(0, 300));
+    console.error('Gemini error', res.status, raw.slice(0, 300));
     throw new AiError('AI service error ' + res.status, kind, res.status);
   }
 
@@ -68,13 +62,12 @@ async function callGemini({ apiKey, model, temperature, systemText, userText, sc
     throw new AiError('AI answer was not readable', 'bad_answer');
   }
 
-  const text = (((data.choices || [])[0] || {}).message || {}).content;
+  const parts = (((data.candidates || [])[0] || {}).content || {}).parts || [];
+  const text = parts.filter((p) => !p.thought && typeof p.text === 'string').map((p) => p.text).join('');
   if (!text) throw new AiError('AI returned no text', 'bad_answer');
-
   return text;
 }
 
-// Asks, parses the JSON, and retries (busy: wait and retry; unreadable answer: retry once).
 async function askJson(opts, validate) {
   let lastErr;
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -93,7 +86,7 @@ async function askJson(opts, validate) {
     } catch (e) {
       lastErr = e;
       if (e.kind === 'config') throw e;
-      if (e.kind === 'bad_answer' && attempt >= 1) throw e; // one retry for unreadable answers
+      if (e.kind === 'bad_answer' && attempt >= 1) throw e;
       if (e.kind === 'busy' || e.kind === 'network') await U.sleep(3000 * (attempt + 1));
     }
   }
