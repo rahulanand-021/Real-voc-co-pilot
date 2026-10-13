@@ -8,7 +8,7 @@ module.exports = {
   complaint_max_rating: 3,
   min_words: 4,
   excluded_warning_pct: 40,
-  ai_model: 'llama-3.3-70b-versatile',
+  ai_model: 'llama-3.1-8b-instant',
   ai_temperature: 0,
   tag_batch_size: 30,
   min_confidence: 0.6,
